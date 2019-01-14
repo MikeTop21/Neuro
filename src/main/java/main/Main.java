@@ -31,7 +31,7 @@ public class Main {
     
     public static void main(String[] args) {
         
-        NeyroArray    na = new NeyroArray(3,2,1,false);
+        NeyroArray    na = new NeyroArray(new int[]{2,2,1},false);
         
         double[][][] weights = {
             {{0.45,0.78},{-0.12,0.13}},
@@ -40,7 +40,9 @@ public class Main {
         
         na.setWeights(weights);        
         
-        na.calcIteration(new double[] {1,0}, new double[] {1});
+//        na.calcIteration(new double[] {1,0});
+
+          na.oneIteration(new double[][]{{1,1}}, new double[][]{{1}});
         
 //        layers.add(new Layer(3, 1));
 //        layers.add(new Layer(1, 1));
