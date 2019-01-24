@@ -5,6 +5,12 @@
  */
 package simple;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.text.NumberFormat;
+import java.util.Locale;
+import java.util.Random;
+
 /**
  *
  * @author mike
@@ -50,14 +56,21 @@ public class NeyroArray {
 //    Момент
     private double moment = 0.3;
 
-    public NeyroArray(int[] ls, boolean withBias) {
+    private boolean withBias;
+    
+    private double[] sigmaarr ;
+
+    public NeyroArray(int[] ls, boolean withBias,double speed,double moment) {
         this.layers = ls.length;
+        this.speed = speed;
+        this.moment = moment;
+        this.withBias = withBias;
         this.ls = new int[ls.length];// Сколько слоев в сети
 // Если необходим биас - тогда добавляем его  в каждый слой кроме выходного        
 
-        for (int i = 0; i < ls.length ; i++) {
-            if (withBias && i<(ls.length-1)) {// Если с биасом и слой не выходной добавляем биас
-                this.ls[i] = ++ls[i];
+        for (int i = 0; i < ls.length; i++) {
+            if (withBias && i < (ls.length - 1)) {// Если с биасом и слой не выходной добавляем биас
+                this.ls[i] = ls[i]+1;
             } else {
                 this.ls[i] = ls[i];
             }
@@ -69,14 +82,23 @@ public class NeyroArray {
 //  По всем слоям кроме выходного (у него отстутствуют веса)      
         for (int i = 0; i < (layers - 1); i++) {
 //  Количество нейронов в слое плюс один биас            
-            weights[i] = new double[ls[i]][];
+            weights[i] = new double[this.ls[i]][];
 //  Количество весов у нейрона равно количеству нейронов в следующем слое            
 
             for (int j = 0; j < weights[i].length; j++) {
-                weights[i][j] = new double[ls[i + 1]];
+// Если присутствуют биасы и следующий слой не выходной - тогда количество весов в нейроне будет меньше
+// числа нейронов в следующем слое на 1 т.к. к биасу весы от нашего нейрона не не идут,
+// но в выходном слое биаса не бывает
+                if (withBias && i < (layers - 2)) {
+                    weights[i][j] = new double[this.ls[i + 1] - 1];
+                } else {
+                    weights[i][j] = new double[this.ls[i + 1]];
+                }
             }
 
         }
+        
+        activateWeights();
 
 //  Массив изменений весов в предыдущем цикле обучения
 //  Количество слоев      
@@ -84,11 +106,11 @@ public class NeyroArray {
 //  По всем слоям кроме выходного (у него отстутствуют веса)      
         for (int i = 0; i < (layers - 1); i++) {
 //  Количество нейронов в слое плюс один биас            
-            deltaWeights[i] = new double[ls[i]][];
+            deltaWeights[i] = new double[this.ls[i]][];
 //  Количество весов у нейрона равно количеству нейронов в следующем слое            
 
             for (int j = 0; j < deltaWeights[i].length; j++) {
-                deltaWeights[i][j] = new double[ls[i + 1]];
+                deltaWeights[i][j] = new double[this.ls[i + 1]];
             }
         }
 
@@ -99,7 +121,7 @@ public class NeyroArray {
         for (int i = 0; i < layers; i++) {
 
 // Количество нейронов в слое плюс один биас 
-            outputs[i] = new double[ls[i]];
+            outputs[i] = new double[this.ls[i]];
 // Расставляем значения всем нейронам 1 сразу, чтобы потом не заморачивться с биасами            
             for (int j = 0; j < outputs[i].length; j++) {
                 outputs[i][j] = 1;
@@ -112,7 +134,7 @@ public class NeyroArray {
 //  По всем слоям     
         for (int i = 0; i < layers; i++) {
 // Количество нейронов в слое плюс один биас 
-            sigma[i] = new double[ls[i]];
+            sigma[i] = new double[this.ls[i]];
         }
 
 //  Массив градиентов нейронов
@@ -120,14 +142,17 @@ public class NeyroArray {
 //  По всем слоям кроме выходного (у него отстутствуют веса)      
         for (int i = 0; i < (layers - 1); i++) {
 //  Количество нейронов в слое плюс один биас            
-            grads[i] = new double[ls[i]][];
+            grads[i] = new double[this.ls[i]][];
 //  Количество весов у нейрона равно количеству нейронов в следующем слое            
 
             for (int j = 0; j < grads[i].length; j++) {
-                grads[i][j] = new double[ls[i + 1]];
+                grads[i][j] = new double[this.ls[i + 1]];
             }
         }
-
+// Загрузка массива заранее рассчитанных значений логистической функции, чтобы не рассчитывать в коде
+//        SigmaArr sa = new SigmaArr();
+//        sigmaarr = sa.sigmaarr;        
+        
     }
 //  Рассчет значений
 
@@ -137,7 +162,8 @@ public class NeyroArray {
         for (int i = 0; i < layers; i++) {
 // Входной слой
             if (i == 0) {
-                for (int j = 0; j < (ls[i]-1); j++) {
+//                for (int j = 0; j < (ls[i]); j++) {
+                for (int j = 0; j < quests.length; j++) {
 
                     outputs[i][j] = quests[j];
 
@@ -146,15 +172,38 @@ public class NeyroArray {
             } else {// Спрятанные слои и выходной слой
 
                 for (int j = 0; j < (ls[i]); j++) {// По всем нейронам включая биас
+// Если это биас, то на выходе просто единица
+                    if (withBias && i < (layers - 1) && j == (ls[i] - 1)) {
 
-                    outputs[i][j] = 0;
+                        outputs[i][j] = 1;
 
-                    for (int j1 = 0; j1 < ls[i - 1]; j1++) {
-                       System.out.println("i= " + i + " j= " + j + " j1= " + j1+" iput= "+outputs[i - 1][j1]+" weights= "+weights[i - 1][j1][j]); 
-                        outputs[i][j] += outputs[i - 1][j1] * weights[i - 1][j1][j];
+                    } else {
+
+                        outputs[i][j] = 0;
+
+                        for (int j1 = 0; j1 < ls[i - 1]; j1++) {
+//                            System.out.print("i= " + i + " j= " + j + " j1= " + j1);
+//                            System.out.print(" iput= " + outputs[i - 1][j1]);
+//                            System.out.println(" weights= " + weights[i - 1][j1][j]);
+                            outputs[i][j] += outputs[i - 1][j1] * weights[i - 1][j1][j];
+                        }
+
+                        outputs[i][j] = 1 / (1 + Math.exp(-1 * (outputs[i][j])));
+// ----------------------- Если мы используем заранее сосчитанные значения функции сигма из класса LoadData, тогда раскомментировать,
+// а предыдущую строку расомментировать
+//System.out.println("outputs[i][j]= " + outputs[i][j]);
+//                        int x = (int)( outputs[i][j]*10000)+10000;
+//                        if(x<0 ) {
+//                            outputs[i][j] = 0;
+//                        }else if( x>20000){
+//                            outputs[i][j] = 1;
+//                        }else{
+//                         outputs[i][j] =sigmaarr[x];
+//                        }
+//---------------------------------------------------------------------------------------
                     }
 
-                    outputs[i][j] = 1 / (1 + Math.exp(-1 * (outputs[i][j])));
+                    System.out.println("outputs[i][j]= " + outputs[i][j]);
 
                 }
 
@@ -171,8 +220,10 @@ public class NeyroArray {
 
 //  Получим ошибку за итерацию и сигму для выходного слоя        
         for (int j = 0; j < ls[layers - 1]; j++) {
-            iterErr += Math.pow((answers[j] - outputs[layers - 1][j]),2);
-
+//  Квадратичная ошибка          
+            iterErr += Math.pow((answers[j] - outputs[layers - 1][j]), 2);
+// Сигма для нейронов выходного слоя
+// производня от логистической функции где аргумент выходное значения умножить на ошибку значения
             sigma[layers - 1][j] = (1 - outputs[layers - 1][j]) * outputs[layers - 1][j] * (answers[j] - outputs[layers - 1][j]);
         }
 
@@ -185,25 +236,30 @@ public class NeyroArray {
 
                     double sigmaAweight = 0;
 
-                    // По всем нейронам следующего слоя (без биаса)
+                    // По всем нейронам следующего (верхнего) слоя (без биаса)
+//  перемножаем все веса нейрона для нейронов верхнего слоя на сигму нейрона верхнего слоя                  
                     for (int j1 = 0; j1 < ls[i + 1]; j1++) {
 
                         sigmaAweight += weights[i][j][j1] * sigma[i + 1][j1];
                     }
-
+// Умножаем производную от логистической функции с аргументом равным выходному значению  на 
+// сумму весов для нейрона следующего(верхнего) слоя умноженную на сигму следующего(верхнего) слоя
                     sigma[i][j] = (1 - outputs[i][j]) * outputs[i][j] * sigmaAweight;
                 }
-                // По всем нейронам следующего слоя (без биаса)
+                // По всем нейронам  слоя (без биаса)
                 for (int j1 = 0; j1 < ls[i + 1]; j1++) {
-
+                    
+//  Получаем градиент для текущего нейрона умножением выхода нейрона на сигму нейрона следующего слоя для которого предназначен этот вес                  
                     grads[i][j][j1] = outputs[i][j] * sigma[i + 1][j1];
+//  Получим значения изменений весов для весов текущего слоя 
+// умножаем скорость на градиент плюс умножение предыдущего значения изменения веса на момент
                     deltaWeights[i][j][j1] = speed * grads[i][j][j1] + moment * deltaWeights[i][j][j1];
+
                 }
 
             }
 
         }
- 
 
 //  К весам нейронов добавляем рассчитанное изменение весов      
         for (int i = 0; i < (layers - 1); i++) {
@@ -214,34 +270,41 @@ public class NeyroArray {
             }
         }
 
-        System.out.println("iterErr " + (iterErr/answers.length));
+        System.out.println("iterErr " + (iterErr / answers.length));
 
-        return iterErr/answers.length;
+        return iterErr / answers.length;
     }
 
-       
-        
-    public double oneIteration (double[][] example, double[][] answer){
-        
+    public double oneIteration(double[][] example, double[][] answer) {
+
         double qErr = 0;
-        
-        for (int i=0; i<example.length; i++){
-            
+
+        for (int i = 0; i < example.length; i++) {
+
             calcIteration(example[i]);
-            
+
             qErr += learnCalcDesending(answer[i]);
-            
+
         }
-        
-        qErr = qErr/example.length;
-        
+
+        qErr = qErr / example.length;
+
         System.out.println("qErr= " + qErr);
-        
+
         return qErr;
-    }    
-    
-    
+    }
+
     public double[][][] getWeights() {
+        for (int i = 0; i < (layers - 1); i++) {
+            for (int j = 0; j < weights[i].length; j++) {
+                for (int k = 0; k < weights[i][j].length; k++) {
+                    System.out.print("i= " + i + " j= " + j + " k= " + k + " weight= ");
+                    System.out.printf("%f", weights[i][j][k]);
+                    System.out.println("");
+                }
+            }
+        }
+
         return weights;
     }
 
@@ -250,6 +313,15 @@ public class NeyroArray {
     }
 
     public double[][] getOutputs() {
+
+        for (int i = 0; i < layers; i++) {
+            System.out.println("\n layer= " + i);
+            for (int j = 0; j < outputs[i].length; j++) {
+                System.out.print(" outputs " + j + " = ");
+                System.out.printf("%f", outputs[i][j]);
+            }
+        }
+
         return outputs;
     }
 
@@ -258,4 +330,16 @@ public class NeyroArray {
         System.out.println("");
     }
 
+    public void activateWeights(){
+        for (int i = 0; i < (layers - 1); i++) {
+            for (int j = 0; j < weights[i].length; j++) {
+                for (int k = 0; k < weights[i][j].length; k++) {
+                    weights[i][j][k] = Math.random()-0.5;
+//                    System.out.print("i= " + i + " j= " + j + " k= " + k + " weight= ");
+//                    System.out.printf("%f", weights[i][j][k]);
+//                    System.out.println("");
+                }
+            }
+        }        
+    }
 }
